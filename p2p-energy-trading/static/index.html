@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Microgrid Energy Trading Engine</title>
+<meta name="description" content="Peer-to-peer energy trading with RSA signatures, ElGamal encryption and a three-node simulated ledger.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout concept: one long dark page. A hero with a live network canvas, a block of
+   slide-derived sections, then the working simulator, math lab and benchmark. */
+:root {
+  --bg: #070b16;
+  --bg-2: #0c1326;
+  --ink: #e9edf9;
+  --muted: #98a2c3;
+  --faint: #5d6890;
+  --violet: #8b5cf6;
+  --cyan: #22d3ee;
+  --good: #34d399;
+  --bad: #fb7185;
+  --warn: #fbbf24;
+  --line: rgba(150, 165, 255, .16);
+  --panel-a: rgba(26, 35, 66, .72);
+  --panel-b: rgba(11, 17, 34, .78);
+  --display: "Newsreader", Georgia, serif;
+  --body: "Hanken Grotesk", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --radius: 18px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 1rem/1.6 var(--body); -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(900px 500px at 85% -5%, rgba(139, 92, 246, .18), transparent 60%),
+    radial-gradient(800px 500px at -5% 35%, rgba(34, 211, 238, .09), transparent 60%);
+  background-attachment: fixed;
+}
+a { color: inherit; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; border-radius: 6px; }
+.wrap { width: min(1180px, 100%); margin-inline: auto; padding-inline: 20px; }
+.mono { font-family: var(--mono); }
+
+/* nav */
+.nav { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(14px); background: rgba(7, 11, 22, .72); border-bottom: 1px solid var(--line); }
+.nav .wrap { display: flex; align-items: center; gap: 22px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 600; font-size: 1.15rem; text-decoration: none; white-space: nowrap; }
+.brand svg { width: 26px; height: 26px; color: var(--cyan); }
+.nav ul { display: flex; gap: 4px; list-style: none; margin: 0 0 0 auto; padding: 0; overflow-x: auto; scrollbar-width: none; }
+.nav li a { display: block; padding: 6px 11px; border-radius: 99px; color: var(--muted); font-size: .88rem; text-decoration: none; white-space: nowrap; transition: .2s; }
+.nav li a:hover, .nav li a.on { color: var(--ink); background: rgba(139, 92, 246, .16); }
+.btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: rgba(255, 255, 255, .04); padding: 9px 16px; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: .92rem; text-decoration: none; transition: transform .15s, border-color .2s, background .2s; }
+.btn:hover { border-color: rgba(139, 92, 246, .6); background: rgba(139, 92, 246, .12); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { border: 0; color: #060912; background: linear-gradient(100deg, var(--violet), var(--cyan)); box-shadow: 0 8px 28px -10px rgba(34, 211, 238, .6); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn[disabled] { opacity: .5; cursor: progress; }
+.btn svg { width: 17px; height: 17px; }
+
+/* hero */
+.hero { position: relative; padding-block: 72px 56px; overflow: hidden; border-bottom: 1px solid var(--line); }
+.hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .9; }
+.hero .wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr); gap: 40px; align-items: center; }
+.eyebrow { font-family: var(--mono); font-size: .76rem; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.08; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(2.7rem, 6.4vw, 5.2rem); letter-spacing: -.02em; margin-block: 14px 18px; }
+h1 em { font-style: italic; font-weight: 500; background: linear-gradient(100deg, #b79cff, var(--cyan)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lede { color: var(--muted); font-size: 1.12rem; max-width: 58ch; margin: 0 0 26px; }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 28px; }
+.chip { font-family: var(--mono); font-size: .76rem; padding: 5px 11px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); background: rgba(255, 255, 255, .03); }
+.chip b { color: var(--ink); font-weight: 500; }
+.voucher { border: 1px solid rgba(139, 92, 246, .4); border-radius: var(--radius); padding: 20px; background: linear-gradient(160deg, rgba(31, 40, 78, .85), rgba(9, 14, 30, .9)); box-shadow: 0 30px 70px -30px rgba(139, 92, 246, .55); font-family: var(--mono); font-size: .76rem; color: var(--muted); }
+.voucher h3 { font-family: var(--body); font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink); display: flex; justify-content: space-between; margin-bottom: 14px; }
+.voucher h3 span { color: var(--good); }
+.voucher dl { margin: 0; display: grid; gap: 8px; }
+.voucher dl div { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 10px; }
+.voucher dt { color: var(--faint); }
+.voucher dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.voucher dd.enc { color: var(--cyan); }
+.voucher dd.sig { color: #b79cff; }
+
+/* sections */
+section { padding-block: 84px; }
+section + section { border-top: 1px solid var(--line); }
+.sec-head { max-width: 760px; margin-bottom: 36px; }
+.sec-head h2 { font-size: clamp(2rem, 4.4vw, 3.1rem); margin-block: 10px 14px; }
+.bar { width: 62px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--violet), var(--cyan)); margin-bottom: 16px; }
+.sec-head p { color: var(--muted); margin: 0; font-size: 1.05rem; }
+.grid { display: grid; gap: 18px; }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.card { --c: var(--violet); position: relative; padding: 24px; border-radius: var(--radius); border: 1px solid color-mix(in srgb, var(--c) 38%, transparent); background: linear-gradient(170deg, var(--panel-a), var(--panel-b)); min-width: 0; transition: transform .25s, border-color .25s, box-shadow .25s; }
+.card:nth-child(even) { --c: var(--cyan); }
+.card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--c) 75%, transparent); box-shadow: 0 22px 50px -28px var(--c); }
+.card .num { font-family: var(--display); font-size: 1.9rem; font-weight: 600; color: var(--c); line-height: 1; }
+.card .ico { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); border: 1px solid color-mix(in srgb, var(--c) 40%, transparent); flex: none; }
+.card .ico svg { width: 22px; height: 22px; }
+.card .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+.card h3 { font-size: 1.35rem; margin-bottom: 8px; }
+.card p { margin: 0; color: var(--muted); font-size: .97rem; }
+.card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; color: var(--muted); font-size: .94rem; }
+.card li { padding-left: 18px; position: relative; }
+.card li::before { content: ""; position: absolute; left: 0; top: .62em; width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
+.card h4 { margin: 16px 0 8px; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--c); font-weight: 700; }
+.card h4:first-of-type { margin-top: 0; }
+.tag { display: inline-block; margin-top: 14px; font-family: var(--mono); font-size: .72rem; padding: 3px 9px; border-radius: 8px; color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); }
+.hl { color: var(--ink); font-weight: 600; }
+
+/* timeline */
+.timeline { display: grid; gap: 14px; position: relative; }
+.timeline::before { content: ""; position: absolute; left: 25px; top: 20px; bottom: 20px; width: 2px; background: linear-gradient(var(--violet), var(--cyan)); opacity: .5; }
+.tl { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 18px; align-items: start; }
+.tl .dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 600; font-size: 1.15rem; color: #060912; background: linear-gradient(135deg, var(--violet), var(--cyan)); position: relative; z-index: 1; box-shadow: 0 0 0 6px var(--bg); }
+.tl .card { padding: 20px 22px; }
+.tl:nth-child(even) .card { --c: var(--cyan); }
+.tl:nth-child(odd) .card { --c: var(--violet); }
+
+/* algorithms */
+.algo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 28px; align-items: center; }
+.algo .big { font-family: var(--display); font-size: 3.2rem; line-height: 1; color: var(--c); }
+.formula { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(0, 0, 0, .35); border: 1px solid var(--line); font-family: var(--mono); font-size: .82rem; color: var(--ink); overflow-x: auto; white-space: nowrap; }
+.purpose { font-family: var(--display); font-size: 1.5rem; margin-bottom: 12px; }
+.purpose span { color: var(--c); }
+
+/* panels used by tools */
+.panel { border-radius: var(--radius); border: 1px solid var(--line); background: linear-gradient(170deg, var(--panel-a), var(--panel-b)); padding: 22px; min-width: 0; }
+.panel > h3 { font-family: var(--body); font-size: .78rem; letter-spacing: .13em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.field { display: grid; gap: 6px; }
+.field label { font-size: .8rem; color: var(--muted); }
+.inp { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .35); outline: none; transition: border-color .2s; font-variant-numeric: tabular-nums; }
+.inp:focus { border-color: var(--cyan); }
+select.inp { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 32px; }
+select.inp option { background: #0c1326; }
+.row { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.row.r3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.row.r5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+/* simulator */
+.people { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 18px; }
+.person { padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: linear-gradient(170deg, var(--panel-a), var(--panel-b)); transition: border-color .3s, box-shadow .3s; min-width: 0; }
+.person.seller { border-color: rgba(139, 92, 246, .7); box-shadow: 0 0 0 1px rgba(139, 92, 246, .3), 0 18px 40px -26px var(--violet); }
+.person.buyer { border-color: rgba(34, 211, 238, .7); box-shadow: 0 0 0 1px rgba(34, 211, 238, .3), 0 18px 40px -26px var(--cyan); }
+.person header { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+.avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #060912; background: linear-gradient(135deg, var(--violet), var(--cyan)); flex: none; }
+.person h4 { margin: 0; font-size: 1rem; line-height: 1.2; }
+.person small { color: var(--faint); font-size: .76rem; display: block; line-height: 1.3; }
+.kwh { font-family: var(--display); font-size: 2.1rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; transition: color .4s; }
+.kwh span { font-family: var(--body); font-size: .8rem; color: var(--muted); font-weight: 500; margin-left: 4px; }
+.meter { height: 6px; border-radius: 6px; background: rgba(255, 255, 255, .07); margin: 10px 0 12px; overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--violet), var(--cyan)); transition: width .7s cubic-bezier(.2, .8, .2, 1); }
+.pmeta { display: flex; justify-content: space-between; gap: 8px; font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pmeta b { color: var(--ink); font-weight: 600; }
+.role-btns { display: flex; gap: 6px; margin-top: 12px; }
+.mini { flex: 1; padding: 5px 0; font-size: .74rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; cursor: pointer; color: var(--muted); transition: .2s; }
+.mini:hover { color: var(--ink); border-color: var(--muted); }
+.person.seller .mini.s { background: rgba(139, 92, 246, .22); color: var(--ink); border-color: rgba(139, 92, 246, .6); }
+.person.buyer .mini.b { background: rgba(34, 211, 238, .18); color: var(--ink); border-color: rgba(34, 211, 238, .6); }
+.sim-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 18px; align-items: start; }
+.stack { display: grid; gap: 18px; min-width: 0; }
+.form { display: grid; gap: 14px; }
+.attacks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.atk { text-align: left; padding: 12px 13px; border-radius: 12px; border: 1px solid rgba(251, 113, 133, .28); background: rgba(251, 113, 133, .05); cursor: pointer; transition: .2s; display: grid; gap: 3px; }
+.atk:hover { border-color: rgba(251, 113, 133, .7); background: rgba(251, 113, 133, .1); transform: translateY(-1px); }
+.atk b { font-size: .9rem; }
+.atk small { color: var(--muted); font-size: .74rem; line-height: 1.35; }
+.atk .who { font-family: var(--mono); color: var(--bad); font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; }
+.atk[disabled] { opacity: .5; pointer-events: none; }
+.verdict { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-radius: 14px; margin-bottom: 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, .03); }
+.verdict.ok { border-color: rgba(52, 211, 153, .5); background: rgba(52, 211, 153, .08); }
+.verdict.no { border-color: rgba(251, 113, 133, .5); background: rgba(251, 113, 133, .08); }
+.verdict strong { font-family: var(--display); font-size: 1.35rem; }
+.verdict.ok strong { color: var(--good); }
+.verdict.no strong { color: var(--bad); }
+.verdict small { color: var(--muted); display: block; font-size: .82rem; max-width: 52ch; }
+.pipe { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pipe li { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 13px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, .22); transition: border-color .3s, background .3s, opacity .3s; }
+.pipe li .st { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .05); color: var(--faint); }
+.pipe li .st svg { width: 16px; height: 16px; }
+.pipe li b { font-size: .92rem; display: block; }
+.pipe li small { color: var(--muted); font-size: .8rem; display: block; line-height: 1.4; overflow-wrap: anywhere; }
+.pipe li em { font-style: normal; font-family: var(--mono); font-size: .7rem; color: var(--faint); }
+.pipe li.wait { opacity: .55; }
+.pipe li.run .st { border: 2px solid var(--cyan); border-top-color: transparent; animation: spin .7s linear infinite; background: none; }
+.pipe li.pass { border-color: rgba(52, 211, 153, .4); }
+.pipe li.pass .st { background: rgba(52, 211, 153, .18); color: var(--good); }
+.pipe li.fail { border-color: rgba(251, 113, 133, .6); background: rgba(251, 113, 133, .08); }
+.pipe li.fail .st { background: rgba(251, 113, 133, .2); color: var(--bad); }
+.pipe li.skipped { opacity: .4; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.votes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.vote { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); font-size: .8rem; background: rgba(0, 0, 0, .22); }
+.vote b { display: flex; justify-content: space-between; font-size: .85rem; }
+.vote .a { color: var(--good); } .vote .r { color: var(--bad); }
+.vote small { color: var(--faint); font-size: .72rem; display: block; margin-top: 3px; }
+.kv { display: grid; gap: 6px; margin-top: 14px; padding: 14px; border-radius: 12px; background: rgba(0, 0, 0, .35); border: 1px solid var(--line); font-family: var(--mono); font-size: .74rem; }
+.kv div { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px; }
+.kv dt, .kv span.k { color: var(--faint); }
+.kv .v { overflow-wrap: anywhere; }
+.kv .v.enc { color: var(--cyan); } .kv .v.sig { color: #b79cff; }
+.sub { font-size: .76rem; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin: 18px 0 8px; font-weight: 700; }
+.nodes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.node { padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: linear-gradient(170deg, var(--panel-a), var(--panel-b)); min-width: 0; }
+.node.faulty { border-color: rgba(251, 191, 36, .6); }
+.node header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.node h4 { margin: 0; font-size: 1rem; }
+.pill { font-family: var(--mono); font-size: .66rem; letter-spacing: .06em; padding: 3px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; }
+.pill.good { color: var(--good); border-color: rgba(52, 211, 153, .45); }
+.pill.warn { color: var(--warn); border-color: rgba(251, 191, 36, .5); }
+.node .meta { font-size: .76rem; color: var(--muted); display: grid; gap: 3px; margin-bottom: 12px; font-family: var(--mono); }
+.chain { display: grid; gap: 0; }
+.blk { position: relative; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font-family: var(--mono); font-size: .68rem; color: var(--muted); background: rgba(0, 0, 0, .25); margin-bottom: 14px; }
+.blk:last-child { margin-bottom: 0; }
+.blk:not(:last-child)::after { content: ""; position: absolute; left: 22px; bottom: -14px; height: 14px; width: 2px; background: var(--violet); opacity: .6; }
+.blk b { color: var(--ink); font-weight: 500; display: flex; justify-content: space-between; }
+.blk.new { animation: pop .9s ease; }
+@keyframes pop { 0% { border-color: var(--cyan); background: rgba(34, 211, 238, .22); transform: scale(1.03); } 100% { transform: none; } }
+.log { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; padding-right: 4px; }
+.log div { display: grid; grid-template-columns: 64px 92px minmax(0, 1fr) auto; gap: 10px; font-size: .78rem; padding: 8px 10px; border-radius: 10px; background: rgba(0, 0, 0, .22); align-items: center; }
+.log .t { font-family: var(--mono); color: var(--faint); }
+.log .ok { color: var(--good); font-weight: 700; } .log .no { color: var(--bad); font-weight: 700; }
+.log .d { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empty { color: var(--faint); font-size: .85rem; padding: 10px; }
+.stats { display: flex; gap: 20px; font-size: .8rem; color: var(--muted); }
+.stats b { color: var(--ink); font-family: var(--display); font-size: 1.15rem; margin-right: 4px; }
+.toast-err { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: .85rem; color: var(--bad); background: rgba(251, 113, 133, .08); border: 1px solid rgba(251, 113, 133, .35); }
+
+/* math lab */
+.tabs { display: inline-flex; padding: 4px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); margin-bottom: 18px; gap: 4px; }
+.tabs button { border: 0; background: transparent; padding: 8px 18px; border-radius: 9px; cursor: pointer; color: var(--muted); font-weight: 600; font-size: .9rem; }
+.tabs button[aria-selected="true"] { color: #060912; background: linear-gradient(100deg, var(--violet), var(--cyan)); }
+.lab { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: 18px; align-items: start; }
+.steps { display: grid; gap: 8px; }
+.stp { display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, .25); }
+.stp span { color: var(--muted); font-size: .84rem; }
+.stp code { font-family: var(--mono); font-size: .78rem; color: var(--ink); overflow-wrap: anywhere; }
+.stp b { font-family: var(--mono); color: var(--cyan); font-weight: 500; text-align: right; overflow-wrap: anywhere; max-width: 22ch; }
+.note { margin-top: 12px; padding: 12px 14px; border-radius: 12px; font-size: .86rem; color: var(--muted); border: 1px dashed var(--line); }
+.note.good { color: var(--good); border-style: solid; border-color: rgba(52, 211, 153, .4); background: rgba(52, 211, 153, .06); }
+.pow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pow i { font-style: normal; font-family: var(--mono); font-size: .72rem; padding: 4px 8px; border-radius: 8px; background: rgba(139, 92, 246, .12); color: var(--muted); }
+.pow i b { color: var(--cyan); font-weight: 500; }
+.pow i.root { background: rgba(34, 211, 238, .16); color: var(--ink); }
+
+/* benchmark */
+.bench { display: grid; grid-template-columns: minmax(0, 8fr) minmax(0, 4fr); gap: 18px; align-items: start; }
+.bars { display: grid; gap: 10px; }
+.bar-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 76px; gap: 12px; align-items: center; font-size: .84rem; }
+.bar-row span { color: var(--muted); }
+.bar-row .tr { height: 12px; border-radius: 8px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+.bar-row .tr i { display: block; height: 100%; border-radius: 8px; width: 0; transition: width 1s cubic-bezier(.2, .8, .2, 1); }
+.bar-row .tr i.rsa { background: linear-gradient(90deg, #6d4cd8, var(--violet)); }
+.bar-row .tr i.eg { background: linear-gradient(90deg, #14a3bd, var(--cyan)); }
+.bar-row b { font-family: var(--mono); font-weight: 500; text-align: right; font-size: .78rem; }
+.legend { display: flex; gap: 16px; font-size: .78rem; color: var(--muted); margin-bottom: 14px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.scroll { overflow-x: auto; }
+th, td { padding: 8px 6px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--faint); font-weight: 600; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; }
+.big-stat { font-family: var(--display); font-size: 3rem; line-height: 1; margin: 6px 0; background: linear-gradient(100deg, #b79cff, var(--cyan)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* footer */
+.thanks { text-align: center; padding-block: 90px 70px; position: relative; overflow: hidden; }
+.thanks h2 { font-size: clamp(2.6rem, 7vw, 5rem); letter-spacing: .04em; text-transform: uppercase; font-weight: 400; }
+.sun { width: 130px; height: 130px; margin: 0 auto 24px; color: var(--ink); opacity: .85; }
+pre.run { display: inline-block; text-align: left; margin: 26px auto 0; padding: 16px 20px; border-radius: 14px; border: 1px solid var(--line); background: rgba(0, 0, 0, .4); font-family: var(--mono); font-size: .85rem; color: var(--muted); max-width: 100%; overflow-x: auto; }
+pre.run b { color: var(--cyan); font-weight: 500; }
+footer { text-align: center; color: var(--faint); font-size: .8rem; padding: 0 20px 36px; }
+
+@media (max-width: 1000px) {
+  .hero .wrap, .algo, .sim-grid, .lab, .bench { grid-template-columns: minmax(0, 1fr); }
+  .g4, .people { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g3, .nodes { grid-template-columns: minmax(0, 1fr); }
+  .nav ul { display: none; }
+  .nav .btn { margin-left: auto; }
+}
+@media (max-width: 640px) {
+  section { padding-block: 60px; }
+  .g2, .g4, .people, .row, .row.r3, .row.r5, .attacks, .votes { grid-template-columns: minmax(0, 1fr); }
+  .stp { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .stp b { text-align: left; max-width: none; }
+  .bar-row { grid-template-columns: 110px minmax(0, 1fr) 62px; }
+  .log div { grid-template-columns: 58px minmax(0, 1fr) auto; }
+  .log .d { display: none; }
+  .tl { grid-template-columns: 40px minmax(0, 1fr); gap: 12px; }
+  .tl .dot { width: 40px; height: 40px; font-size: 1rem; }
+  .timeline::before { left: 19px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><span id="brandIco"></span>Microgrid Engine</a>
+    <ul id="navList"></ul>
+    <a class="btn primary" href="#simulator">Open simulator</a>
+  </div>
+</header>
+
+<main id="top">
+  <!-- HERO -->
+  <div class="hero">
+    <canvas id="net" aria-hidden="true"></canvas>
+    <div class="wrap">
+      <div>
+        <div class="eyebrow">Modern cryptography · mini-project</div>
+        <h1>Decentralized microgrid energy trading, <em>signed and sealed.</em></h1>
+        <p class="lede">A peer-to-peer trading engine where every energy voucher is signed with RSA, encrypted with ElGamal, checked against the meter and agreed by three ledger nodes. Everything on this page runs on a Python backend.</p>
+        <div class="cta">
+          <a class="btn primary" href="#simulator"><span data-ico="bolt"></span>Trade some energy</a>
+          <a class="btn" href="#problem">Read the design</a>
+        </div>
+        <div class="chips" id="chips"></div>
+      </div>
+      <div class="voucher" aria-label="Sample energy voucher">
+        <h3>Energy voucher <span id="vStatus">● signed</span></h3>
+        <dl id="vBody">
+          <div><dt>seller</dt><dd>asha</dd></div>
+          <div><dt>buyer</dt><dd>meera</dd></div>
+          <div><dt>nonce</dt><dd>loading…</dd></div>
+          <div><dt>ciphertext</dt><dd class="enc">ElGamal (c₁, c₂)</dd></div>
+          <div><dt>signature</dt><dd class="sig">RSA</dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROBLEM -->
+  <section id="problem"><div class="wrap">
+    <div class="sec-head"><div class="eyebrow">Problem domain</div><h2>Peer-to-peer energy trading in microgrids</h2><div class="bar"></div>
+      <p>Microgrids let prosumers sell surplus electricity directly to neighbours. Removing the central intermediary creates trust and validation challenges.</p></div>
+    <div class="grid g3" id="problemCards"></div>
+  </div></section>
+
+  <!-- EXISTING -->
+  <section id="existing"><div class="wrap">
+    <div class="sec-head"><div class="eyebrow">Literature review</div><h2>Review of the existing system</h2><div class="bar"></div>
+      <p>Current approaches to energy trading and their key limitations.</p></div>
+    <div class="grid g3" id="existingCards"></div>
+  </div></section>
+
+  <!-- CHALLENGES -->
+  <section id="challenges"><div class="wrap">
+    <div class="sec-head"><div class="eyebrow">Threat model</div><h2>Security challenges</h2><div class="bar"></div>
+      <p>The attack lab in the simulator below reproduces each of these against the live engine.</p></div>
+    <div class="grid g2" id="challengeCards"></div>
+  </div></section>
+
+  <!-- FEASIBILITY -->
+  <section id="feasibility"><div class="wrap">
+    <div class="sec-head"><div class="eyebrow">Project feasibility</div><h2>Can it be built? It already runs.</h2><div class="bar"></div></div>
+    <div class="grid g2" id="feasCards"></div>
+  </div></section>
+
+  <!-- OBJECTIVES -->
+  <section id="objectives"><div class="wrap">
+    <div class="sec-head"><div class="eyebrow">Goals</div><h2>Project objectives</h2><div class="bar"></div>
+      <p>Each objective points to the Python module that delivers it.</p></div>
+    <div class="grid g3" id="objCards"></div>
+  </div></section>
+
+  <!-- METHOD -->
+  <section id="method"><div class="wrap">
+    <div class="sec-head"><div class="eyebrow">Methodology</div><h2>Proposed methodology timeline</h2><div class="bar"></div></div>
+    <div class="timeline" id="timeline"></div>
+  </div></section>
+
+  <!-- ALGORITHMS -->
+  <section id="algorithms"><div class="wrap">
+    <div class="sec-head"><div class="eyebrow">Cryptosystems</div><h2>Relevance of RSA and ElGamal</h2><div class="bar"></div></div>
+    <div class="grid" id="algoCards"></div>
+  </div></section>
+
+  <!-- MATH -->
+  <section id="math"><div class="wrap">
+    <div class="sec-head"><div class="eyebrow">Mathematical techniques</div><h2>The mathematics, with small numbers</h2><div class="bar"></div>
+      <p>Change any value and the Python backend recomputes every step. Primitive roots, Euler's theorem, modular arithmetic and the discrete logarithm problem all show up here.</p></div>
+    <div class="grid g4" id="mathCards" style="margin-bottom:34px"></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabRsa" aria-selected="true">RSA</button>
+      <button role="tab" id="tabEg" aria-selected="false">ElGamal</button>
+    </div>
+    <div class="lab" id="lab"></div>
+  </div></section>
+
+  <!-- SIMULATOR -->
+  <section id="simulator"><div class="wrap">
+    <div class="sec-head"><div class="eyebrow">Live simulator</div><h2>Trade energy. Then try to break it.</h2><div class="bar"></div>
+      <p>Pick a seller and buyer, then sign, encrypt and submit a voucher. The attack lab sends a malicious voucher through the same pipeline and shows which check stops it.</p></div>
+    <div class="people" id="people"></div>
+    <div class="sim-grid">
+      <div class="stack">
+        <div class="panel">
+          <h3>New voucher</h3>
+          <div class="form">
+            <div class="row">
+              <div class="field"><label for="seller">Seller</label><select class="inp" id="seller"></select></div>
+              <div class="field"><label for="buyer">Buyer</label><select class="inp" id="buyer"></select></div>
+            </div>
+            <div class="row">
+              <div class="field"><label for="qty">Energy (kWh)</label><input class="inp" id="qty" type="number" min="0.1" step="0.1" value="5"></div>
+              <div class="field"><label for="price">Price (₹ per kWh)</label><input class="inp" id="price" type="number" min="0.1" step="0.1" value="6.5"></div>
+            </div>
+            <button class="btn primary" id="go" style="justify-content:center"><span data-ico="lock"></span>Sign, encrypt and submit</button>
+            <div id="formErr"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Attack lab</h3>
+          <div class="attacks" id="attacks"></div>
+        </div>
+      </div>
+      <div class="panel" id="resultPanel">
+        <h3>Verification pipeline <span class="mono" id="timing" style="text-transform:none;letter-spacing:0;color:var(--faint)"></span></h3>
+        <div class="verdict" id="verdict"><div><strong>Waiting for a voucher</strong><small>Submit a trade or launch an attack to see each check run.</small></div></div>
+        <ol class="pipe" id="pipe"></ol>
+        <div class="votes" id="votes"></div>
+        <div class="sub">Voucher on the wire</div>
+        <dl class="kv" id="wire" style="margin-top:0"></dl>
+      </div>
+    </div>
+
+    <div class="sec-head" style="margin-top:56px;margin-bottom:20px"><h3 style="font-size:1.7rem">Three-node ledger</h3>
+      <p style="font-size:.95rem">Each node keeps its own balances and hash-linked chain. A voucher settles when 2 of 3 nodes accept it. Mark a node faulty and it votes the opposite way.</p></div>
+    <div class="nodes" id="nodes"></div>
+    <div class="panel" style="margin-top:18px">
+      <h3>Activity <span class="stats" id="stats"></span></h3>
+      <div class="log" id="log"></div>
+      <div style="margin-top:14px"><button class="btn" id="reset">Reset simulation</button></div>
+    </div>
+  </div></section>
+
+  <!-- BENCHMARK -->
+  <section id="benchmark"><div class="wrap">
+    <div class="sec-head"><div class="eyebrow">Performance comparison</div><h2>What the cryptography costs</h2><div class="bar"></div>
+      <p>Timings are measured live by the Python backend on a ~100 byte voucher payload. Bars use a log scale because the operations differ by orders of magnitude.</p></div>
+    <div class="bench">
+      <div class="panel">
+        <h3>Time per operation <button class="btn" id="runBench">Run again</button></h3>
+        <div class="legend"><span><i style="background:var(--violet)"></i>RSA signature</span><span><i style="background:var(--cyan)"></i>ElGamal encryption</span></div>
+        <div class="bars" id="bars"><div class="empty">Measuring…</div></div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:16px;color:var(--muted);font-size:.84rem"><input type="checkbox" id="b2048"> Include RSA-2048 (key generation takes a few seconds)</label>
+      </div>
+      <div class="stack">
+        <div class="panel"><h3>Estimated capacity</h3><div class="big-stat" id="tps">–</div><div style="color:var(--muted);font-size:.86rem" id="tpsNote">trades per second</div></div>
+        <div class="panel"><h3>Sizes and key generation</h3><div class="scroll"><table id="tbl"></table></div></div>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- THANKS -->
+  <section class="thanks"><div class="wrap">
+    <h2>Thank you</h2>
+  </div></section>
+</main>
+
+<script>
+"use strict";
+/* ---------- helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const ICONS = {
+  shield: '<path d="M12 3l8 3v6c0 4.5-3.2 7.5-8 9-4.8-1.5-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/>',
+  bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  doc: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h4"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  bank: '<path d="M3 10l9-6 9 6M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/>',
+  cube: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/>',
+  db: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>',
+  users: '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5a3 3 0 0 1 0 6M18 14c1.8.8 3 2.6 3 6"/>',
+  chart: '<path d="M5 20V11M12 20V4M19 20v-7"/>',
+  check: '<path d="M5 12l5 5 9-10"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  minus: '<path d="M6 12h12"/>',
+  monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  nodes: '<circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M11 7.3L6 15.7M13 7.3l5 8.4M7.5 18h9"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
+  calc: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+};
+const ico = n => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ""}</svg>`;
+document.querySelectorAll("[data-ico]").forEach(e => e.innerHTML = ico(e.dataset.ico));
+$("#brandIco").innerHTML = ico("bolt");
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const d = j.detail;
+    throw new Error(!d ? "Request failed." : typeof d === "string" ? d : d.map(x => x.msg).join("; "));
+  }
+  return j;
+}
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+/* ---------- nav ---------- */
+const NAV = [["problem", "Problem"], ["existing", "Review"], ["challenges", "Threats"], ["method", "Method"], ["algorithms", "RSA & ElGamal"], ["math", "Math lab"], ["simulator", "Simulator"], ["benchmark", "Benchmark"]];
+$("#navList").innerHTML = NAV.map(([id, t]) => `<li><a href="#${id}" data-s="${id}">${t}</a></li>`).join("");
+const spy = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) document.querySelectorAll("#navList a").forEach(a => a.classList.toggle("on", a.dataset.s === e.target.id));
+}), { rootMargin: "-45% 0px -50% 0px" });
+NAV.forEach(([id]) => { const s = document.getElementById(id); if (s) spy.observe(s); });
+
+/* ---------- static content from the slides ---------- */
+const card = (inner, extra = "") => `<article class="card ${extra}">${inner}</article>`;
+$("#problemCards").innerHTML = [
+  ["01", "link", "Trust", "Participants cannot blindly trust one another."],
+  ["02", "shield", "Security", "Trade data can be tampered with or replayed."],
+  ["03", "doc", "Validity", "Digital energy claims must match physical availability."],
+].map(([n, i, t, d]) => card(`<div class="top"><span class="num">${n}</span><span class="ico">${ico(i)}</span></div><h3>${t}</h3><p>${d}</p>`)).join("");
+
+$("#existingCards").innerHTML = [
+  ["01", "bank", "Traditional / centralized trading",
+    [["Approach", ["Central utility or market operator as trusted intermediary", "Transactions validated and settled centrally", "Mature and easier to regulate"]],
+     ["Limitations", ["Single point of trust and failure", "Limited direct P2P interaction", "Centralized control of transaction data"]]]],
+  ["02", "cube", "Blockchain-based P2P trading",
+    [["Approach", ["Prosumers trade through distributed ledgers", "Smart contracts automate settlement", "Transparency and tamper-resistant records"]],
+     ["Limitations", ["Privacy and scalability concerns", "Consensus adds computational overhead", "Real-world integration with grid constraints is difficult"]]]],
+  ["03", "doc", "Existing research and pilot platforms",
+    [["Examples", ["Blockchain-based P2P energy trading platforms", "Microgrid and transactive-energy research prototypes", "Commercial initiatives such as <span class=hl>Powerledger</span>"]],
+     ["Observed gap", ["Focus on ledger transparency and settlement", "Limited integration of cryptographic validation with physical energy availability", "Real-world deployment faces network, privacy and regulatory constraints"]]]],
+].map(([n, i, t, secs]) => card(`<div class="top"><span class="num">${n}</span><span class="ico">${ico(i)}</span></div><h3>${t}</h3>` +
+  secs.map(([h, l]) => `<h4>${h}</h4><ul>${l.map(x => `<li>${x}</li>`).join("")}</ul>`).join(""))).join("");
+
+$("#challengeCards").innerHTML = [
+  ["01", "doc", "Transaction tampering", "Trade data can be modified before validation or settlement."],
+  ["02", "clock", "Replay and forgery", "Valid transactions may be resubmitted or signatures forged."],
+  ["03", "bolt", "False energy claims", "Digital claims may exceed the seller's actual balance."],
+  ["04", "lock", "Data confidentiality", "Price, quantity and telemetry require confidentiality."],
+].map(([n, i, t, d]) => card(`<div class="top"><span class="num">${n}</span><span class="ico">${ico(i)}</span></div><h3>${t}</h3><p>${d}</p>`)).join("");
+
+$("#feasCards").innerHTML = [
+  ["gear", "Technical", ["FastAPI backend with a web frontend", "Cryptographic primitives implemented in Python for RSA and ElGamal", "Three-node ledger simulation works locally"]],
+  ["db", "Economic", ["Uses open-source software and frameworks", "No specialized grid hardware required", "Runs on standard computing systems"]],
+  ["users", "Operational", ["Simulates sellers, buyers and transactions locally", "Interactive security tests for different attacks", "Modular backend for independent component testing"]],
+  ["doc", "Implementation", ["Built using established web and cryptographic technologies", "Clear REST APIs between frontend and backend", "Can be extended with real meter or IoT data in future"]],
+].map(([i, t, l]) => card(`<div class="top"><h3 style="margin:0">${t} feasibility</h3><span class="ico">${ico(i)}</span></div><ul>${l.map(x => `<li>${x}</li>`).join("")}</ul>`)).join("");
+
+$("#objCards").innerHTML = [
+  ["monitor", "Simulator", "Develop a secure P2P energy trading simulator for real-time transactions among prosumers.", "app/engine.py"],
+  ["doc", "Vouchers", "Implement signed energy vouchers to ensure authenticity and integrity in P2P trading.", "engine.Engine._build"],
+  ["lock", "Cryptography", "Use RSA and ElGamal algorithms to enhance security and confidentiality of transactions.", "crypto_rsa.py · crypto_elgamal.py"],
+  ["chart", "Comparison", "Conduct a performance comparison to evaluate the efficiency of the implemented cryptographic methods.", "app/benchmark.py"],
+  ["check", "Validation", "Validate security properties to ensure the robustness and reliability of the proposed trading system.", "tests/ · attack lab"],
+  ["nodes", "Scalability", "Ensure scalability to accommodate growth in user base and transaction volume within the network.", "benchmark capacity estimate"],
+].map(([i, t, d, f]) => card(`<div class="top"><h3 style="margin:0">${t}</h3><span class="ico">${ico(i)}</span></div><p>${d}</p><span class="tag">${f}</span>`)).join("");
+
+$("#timeline").innerHTML = [
+  ["file", "Trade request", "Seller and buyer define energy quantity and price for the proposed trade.", "Engine.honest()"],
+  ["pen", "Secure transaction creation", "Trade data is canonicalized, digitally signed with RSA, and encrypted using ElGamal.", "crypto_rsa.sign · crypto_elgamal.encrypt"],
+  ["shield", "Multi-layer verification", "Backend checks nonce and timestamp, signature, energy balance, encrypted telemetry, and ledger consensus.", "engine.run_checks()"],
+  ["cube", "Settlement and ledger update", "Valid trades are executed and propagated across the 3-node simulated ledger. Invalid trades are rejected.", "LedgerNode.commit()"],
+].map(([_, t, d, f], i) => `<div class="tl"><div class="dot">${i + 1}</div>${card(`<h3>${t}</h3><p>${d}</p><span class="tag">${f}</span>`)}</div>`).join("");
+
+$("#algoCards").innerHTML = [
+  ["RSA", "Authentication and integrity", ["Uses a public and private key pair", "The seller signs the canonicalized transaction data with the RSA private key", "Every node verifies it with the seller's public key"], "s = EM(SHA-256(m))^d mod n    verify: s^e mod n", "var(--violet)"],
+  ["ElGamal", "Confidentiality", ["Asymmetric encryption based on the Discrete Logarithm Problem", "Protects sensitive price, quantity and telemetry data", "Only the holder of the corresponding private key can decrypt the information"], "c = (g^k mod p,  m · y^k mod p)    m = c₂ · c₁^(−x)", "var(--cyan)"],
+].map(([n, p, l, f, c], i) => `<article class="card algo" style="--c:${c}"><div><div class="big">0${i + 1}</div><h3 style="font-size:2rem">${n}</h3></div><div><div class="purpose"><span>Purpose:</span> ${p}</div><ul>${l.map(x => `<li>${x}</li>`).join("")}</ul><div class="formula">${esc(f)}</div></div></article>`).join("");
+
+$("#mathCards").innerHTML = [
+  ["lock", "RSA", "Key concepts of RSA include <span class=hl>primitive roots</span> and Euler's theorem, ensuring secure communication and encryption."],
+  ["key", "ElGamal", "ElGamal cryptography relies on the <span class=hl>discrete logarithm problem</span>, providing security for digital signatures and key exchanges."],
+  ["calc", "Modular arithmetic", "Fundamental operations in cryptographic computations use <span class=hl>modular arithmetic</span>, enabling secure message transmission."],
+  ["layers", "Foundations", "Understanding these cryptographic foundations is essential for designing secure and efficient energy trading systems."],
+].map(([i, t, d]) => card(`<div class="top"><span class="ico">${ico(i)}</span></div><h3 style="font-size:1.2rem">${t}</h3><p style="font-size:.9rem">${d}</p>`)).join("");
+
+/* ---------- hero network canvas ---------- */
+(function network() {
+  const cv = $("#net"), ctx = cv.getContext("2d");
+  let W, H, nodes = [], edges = [], packets = [], dpr = 1, raf;
+  function layout() {
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    const r = cv.getBoundingClientRect(); W = r.width; H = r.height;
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const n = W < 700 ? 12 : 22; nodes = []; edges = [];
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < n; i++) nodes.push({ x: rnd() * W, y: rnd() * H, r: 2 + rnd() * 3, p: rnd() * 6 });
+    nodes.forEach((a, i) => nodes.forEach((b, j) => { if (j > i && Math.hypot(a.x - b.x, a.y - b.y) < 220) edges.push([i, j]); }));
+  }
+  function frame(t) {
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineWidth = 1;
+    edges.forEach(([i, j]) => { ctx.strokeStyle = "rgba(120,140,255,.13)"; ctx.beginPath(); ctx.moveTo(nodes[i].x, nodes[i].y); ctx.lineTo(nodes[j].x, nodes[j].y); ctx.stroke(); });
+    nodes.forEach(n => {
+      const g = .5 + .5 * Math.sin(t / 900 + n.p);
+      ctx.fillStyle = `rgba(34,211,238,${.35 + .4 * g})`; ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 7); ctx.fill();
+      ctx.strokeStyle = `rgba(34,211,238,${.12 * g})`; ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 5 + 4 * g, 0, 7); ctx.stroke();
+    });
+    if (!REDUCED && edges.length && Math.random() < .06) packets.push({ e: edges[Math.random() * edges.length | 0], t: 0, dir: Math.random() < .5, c: Math.random() < .5 ? "139,92,246" : "34,211,238" });
+    packets = packets.filter(p => p.t < 1);
+    packets.forEach(p => {
+      p.t += .012; const [i, j] = p.dir ? [p.e[1], p.e[0]] : p.e; const a = nodes[i], b = nodes[j];
+      const x = a.x + (b.x - a.x) * p.t, y = a.y + (b.y - a.y) * p.t;
+      const gr = ctx.createRadialGradient(x, y, 0, x, y, 12); gr.addColorStop(0, `rgba(${p.c},.95)`); gr.addColorStop(1, `rgba(${p.c},0)`);
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, 12, 0, 7); ctx.fill();
+    });
+    if (!REDUCED) raf = requestAnimationFrame(frame);
+  }
+  layout(); frame(0);
+  addEventListener("resize", () => { cancelAnimationFrame(raf); layout(); frame(0); });
+})();
+
+
+/* ---------- simulator ---------- */
+let S = null, ATK = [], busy = false, prevHeight = 0;
+const form = { seller: "asha", buyer: "meera" };
+const PIPE_IDLE = [["decrypt", "Decrypt telemetry (ElGamal)"], ["fresh", "Check nonce and timestamp"], ["signature", "Verify seller signature (RSA)"], ["energy", "Check energy balance and meter"], ["funds", "Check buyer funds"], ["consensus", "Ledger consensus (2 of 3)"]];
+const fmt = (n, d = 2) => Number(n).toLocaleString("en-IN", { maximumFractionDigits: d });
+
+function renderPeople() {
+  const max = Math.max(60, ...S.participants.map(p => Math.max(p.ledger_kwh, p.meter_kwh)));
+  $("#people").innerHTML = S.participants.map(p => `
+    <div class="person ${p.id === form.seller ? "seller" : ""} ${p.id === form.buyer ? "buyer" : ""}">
+      <header><div class="avatar">${esc(p.name[0])}</div><div><h4>${esc(p.name)}</h4><small>${esc(p.role)}</small></div></header>
+      <div class="kwh">${fmt(p.ledger_kwh)}<span>kWh on ledger</span></div>
+      <div class="meter"><i style="width:${Math.max(2, p.ledger_kwh / max * 100)}%"></i></div>
+      <div class="pmeta"><span>Meter <b>${fmt(p.meter_kwh)}</b></span><span>Wallet <b>₹${fmt(p.credit)}</b></span></div>
+      <div class="role-btns"><button class="mini s" data-r="seller" data-id="${p.id}">Seller</button><button class="mini b" data-r="buyer" data-id="${p.id}">Buyer</button></div>
+    </div>`).join("");
+  document.querySelectorAll(".mini").forEach(b => b.onclick = () => setRole(b.dataset.r, b.dataset.id));
+}
+function setRole(role, id) {
+  const other = role === "seller" ? "buyer" : "seller";
+  if (form[other] === id) form[other] = form[role];
+  form[role] = id; $("#seller").value = form.seller; $("#buyer").value = form.buyer; renderPeople();
+}
+function fillSelects() {
+  const opts = S.participants.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  ["seller", "buyer"].forEach(k => { $("#" + k).innerHTML = opts; $("#" + k).value = form[k]; $("#" + k).onchange = e => setRole(k, e.target.value); });
+}
+function renderNodes() {
+  $("#nodes").innerHTML = S.nodes.map((n, i) => `
+    <div class="node ${n.byzantine ? "faulty" : ""}">
+      <header><h4>${esc(n.name)}</h4><span class="pill ${n.byzantine ? "warn" : "good"}">${n.byzantine ? "faulty" : "honest"}</span></header>
+      <div class="meta"><span>height ${n.height}</span><span>head ${esc(n.head)}</span><span>${n.valid ? "chain valid ✓" : "chain BROKEN"}</span></div>
+      <div class="chain">${[...n.blocks].reverse().map((b, k) => `<div class="blk ${k === 0 && n.height > prevHeight ? "new" : ""}"><b><span>#${b.index}</span><span>${esc(b.hash)}</span></b>${b.index === 0 ? "genesis" : `${esc(b.summary.seller)} → ${esc(b.summary.buyer)} · ${b.summary.qty_kwh} kWh`}</div>`).join("")}</div>
+      <button class="btn" style="margin-top:14px;width:100%;justify-content:center" data-n="${i}">${n.byzantine ? "Make honest" : "Make faulty"}</button>
+    </div>`).join("");
+  document.querySelectorAll("[data-n]").forEach(b => b.onclick = async () => { S = await post(`/api/nodes/${b.dataset.n}/toggle`); renderAll(); });
+  prevHeight = S.nodes[0].height;
+}
+function renderLog() {
+  $("#stats").innerHTML = `<span><b>${S.stats.accepted}</b>accepted</span><span><b>${S.stats.rejected}</b>rejected</span><span><b>${fmt(S.stats.volume_kwh)}</b>kWh traded</span>`;
+  $("#log").innerHTML = S.log.length ? S.log.map(l => `<div><span class="t">${l.time}</span><span class="${l.accepted ? "ok" : "no"}">${l.accepted ? "ACCEPTED" : "REJECTED"}</span><span class="d" title="${esc(l.reason)}">${esc(l.kind)} · ${esc(l.seller)} → ${esc(l.buyer)} · ${esc(l.reason)}</span><span class="mono" style="color:var(--faint)">${esc(l.tx_id)}</span></div>`).join("") : `<div class="empty">No trades yet.</div>`;
+}
+function renderAll() { renderPeople(); renderNodes(); renderLog(); }
+
+function pipeHTML(steps, states) {
+  return steps.map(([id, title], i) => `<li id="p-${id}" class="${states[i] || "wait"}"><span class="st">${states[i] === "pass" ? ico("check") : states[i] === "fail" ? ico("x") : states[i] === "skipped" ? ico("minus") : ""}</span><div><b>${esc(title)}</b><small>${states[i] ? "" : "Waiting"}</small></div><em></em></li>`).join("");
+}
+function resetPipe() { $("#pipe").innerHTML = pipeHTML(PIPE_IDLE, []); }
+
+async function showResult(res) {
+  const pipe = $("#pipe");
+  pipe.innerHTML = pipeHTML(PIPE_IDLE, []);
+  $("#votes").innerHTML = ""; $("#wire").innerHTML = "";
+  const head = $("#verdict"); head.className = "verdict"; head.innerHTML = `<div><strong>Verifying…</strong><small>Running checks on the gateway node.</small></div>`;
+  const pre = res.preface ? ` The original voucher was ${res.preface.accepted ? "accepted" : "rejected"} first (tx ${esc(res.preface.tx_id)}), then the same bytes were sent again.` : "";
+  for (let i = 0; i < res.steps.length; i++) {
+    const s = res.steps[i], li = $("#p-" + s.id, pipe); if (!li) continue;
+    if (!REDUCED && s.status !== "skipped") { li.className = "run"; li.querySelector(".st").innerHTML = ""; await sleep(340); }
+    li.className = s.status;
+    li.querySelector(".st").innerHTML = ico(s.status === "pass" ? "check" : s.status === "fail" ? "x" : "minus");
+    li.querySelector("small").textContent = s.detail;
+    li.querySelector("em").textContent = s.ms ? s.ms + " ms" : "";
+  }
+  head.className = "verdict " + (res.accepted ? "ok" : "no");
+  head.innerHTML = `<div><strong>${res.accepted ? "Accepted and settled" : "Rejected"}</strong><small>${esc(res.accepted ? "Settled on all three nodes." : res.reason)}${pre}</small></div><span class="pill">${res.attack ? esc(res.attack.title) : "honest trade"} · tx ${esc(res.tx_id)}</span>`;
+  $("#votes").innerHTML = res.votes.map(v => `<div class="vote"><b><span>${esc(v.node)}</span><span class="${v.vote === "accept" ? "a" : "r"}">${v.vote}</span></b><small>${v.faulty ? "faulty node · " : ""}${esc(v.reason.length > 64 ? v.reason.slice(0, 62) + "…" : v.reason)}</small></div>`).join("");
+  const e = res.envelope, t = res.timings_ms;
+  $("#wire").innerHTML = [["seller → buyer", `${e.seller} → ${e.buyer}`], ["nonce", e.nonce], ["timestamp", e.timestamp], ["ciphertext c₁", e.c1, "enc"], ["ciphertext c₂", e.c2, "enc"], ["ciphertext", `${e.ciphertext_blocks} block(s), ${e.ciphertext_bytes} bytes`, "enc"], ["RSA signature", e.signature, "sig"], ["signature size", `${e.signature_bytes} bytes`, "sig"]]
+    .map(([k, v, c]) => `<div><dt>${k}</dt><dd class="v ${c || ""}" style="margin:0">${esc(v)}</dd></div>`).join("");
+  $("#timing").textContent = `sign ${t.sign_ms ?? "–"} ms · encrypt ${t.encrypt_ms ?? "–"} ms · decrypt ${t.decrypt_ms} ms · verify ${t.verify_ms} ms`;
+}
+
+async function run(kind) {
+  if (busy) return; busy = true;
+  document.querySelectorAll("#go, .atk").forEach(b => b.disabled = true);
+  $("#formErr").innerHTML = "";
+  const body = { seller_id: form.seller, buyer_id: form.buyer, qty_kwh: parseFloat($("#qty").value), price_per_kwh: parseFloat($("#price").value) };
+  try {
+    if (form.seller === form.buyer) throw new Error("Choose two different participants.");
+    if (!(body.qty_kwh > 0) || !(body.price_per_kwh > 0)) throw new Error("Energy and price must be positive numbers.");
+    const res = kind ? await post("/api/attack", { ...body, kind }) : await post("/api/trade", body);
+    $("#resultPanel").scrollIntoView({ block: "nearest", behavior: REDUCED ? "auto" : "smooth" });
+    await showResult(res);
+    S = await api("/api/state"); renderAll();
+  } catch (err) {
+    $("#formErr").innerHTML = `<div class="toast-err">${esc(err.message)}</div>`;
+  } finally {
+    busy = false; document.querySelectorAll("#go, .atk").forEach(b => b.disabled = false);
+  }
+}
+
+async function initSim() {
+  [S, ATK] = await Promise.all([api("/api/state"), api("/api/attacks")]);
+  prevHeight = S.nodes[0].height;
+  fillSelects(); renderAll(); resetPipe();
+  $("#attacks").innerHTML = ATK.map(a => `<button class="atk" data-k="${a.kind}"><span class="who">${esc(a.who)}</span><b>${esc(a.title)}</b><small>${esc(a.idea)}</small></button>`).join("");
+  document.querySelectorAll(".atk").forEach(b => b.onclick = () => run(b.dataset.k));
+  $("#go").onclick = () => run(null);
+  $("#reset").onclick = async () => { S = await post("/api/reset"); prevHeight = 0; renderAll(); resetPipe(); $("#votes").innerHTML = ""; $("#wire").innerHTML = ""; $("#timing").textContent = ""; $("#verdict").className = "verdict"; $("#verdict").innerHTML = `<div><strong>Waiting for a voucher</strong><small>Submit a trade or launch an attack to see each check run.</small></div>`; };
+  const c = S.config;
+  $("#chips").innerHTML = [["RSA", c.rsa_bits + "-bit"], ["ElGamal", c.elgamal_bits + "-bit"], ["Ledger", "3 nodes"], ["Quorum", c.quorum + " of 3"], ["Freshness", c.freshness_seconds + " s"]].map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join("");
+  // show a real voucher in the hero
+  try {
+    const e = await api("/api/sample-voucher");
+    $("#vBody").innerHTML = `<div><dt>seller</dt><dd>${esc(e.seller)}</dd></div><div><dt>buyer</dt><dd>${esc(e.buyer)}</dd></div><div><dt>nonce</dt><dd>${esc(e.nonce.slice(0, 20))}…</dd></div><div><dt>ciphertext</dt><dd class="enc">c₁ ${esc(e.c1)}</dd></div><div><dt></dt><dd class="enc">c₂ ${esc(e.c2)}</dd></div><div><dt>signature</dt><dd class="sig">${esc(e.signature)}</dd></div>`;
+  } catch (_) { /* hero keeps its placeholder */ }
+}
+
+/* ---------- math lab ---------- */
+const LAB = {
+  rsa: { fields: [["p", "p (prime)", 61], ["q", "q (prime)", 53], ["m", "Message m", 65], ["e", "e (optional)", ""]], url: "/api/toy/rsa" },
+  eg: { fields: [["p", "p (prime)", 23], ["g", "g (primitive root)", 5], ["x", "Private key x", 6], ["k", "Ephemeral k", 3], ["m", "Message m", 10]], url: "/api/toy/elgamal" },
+};
+let labKind = "rsa", labTimer;
+function buildLab() {
+  const L = LAB[labKind];
+  $("#lab").innerHTML = `<div class="panel"><h3>${labKind === "rsa" ? "RSA parameters" : "ElGamal parameters"}</h3><div class="form">${L.fields.map(([k, t, v]) => `<div class="field"><label for="lab-${k}">${t}</label><input class="inp" id="lab-${k}" type="number" value="${v}"></div>`).join("")}</div></div><div class="panel" id="labOut"></div>`;
+  L.fields.forEach(([k]) => $("#lab-" + k).addEventListener("input", () => { clearTimeout(labTimer); labTimer = setTimeout(runLab, 250); }));
+  runLab();
+}
+async function runLab() {
+  const L = LAB[labKind], q = new URLSearchParams();
+  L.fields.forEach(([k]) => { const v = $("#lab-" + k).value.trim(); if (v !== "") q.set(k, v); });
+  const out = $("#labOut"); if (!out) return;
+  try {
+    const r = await api(L.url + "?" + q);
+    let h = `<h3>Step by step <span class="pill ${r.ok ? "good" : "warn"}">${r.ok ? "round trip ok" : "check failed"}</span></h3><div class="steps">${r.steps.map(s => `<div class="stp"><span>${esc(s.label)}</span><code>${esc(s.formula)}</code><b>${esc(s.value)}</b></div>`).join("")}</div>`;
+    if (r.euler) h += `<div class="note good"><span class="mono">${esc(r.euler.formula)} = ${r.euler.value}</span><br>${esc(r.euler.note)}</div>`;
+    if (r.dlp_note) {
+      const g = parseInt($("#lab-g").value, 10);
+      h += `<div class="sub">Powers of g mod p</div><div class="pow">${r.power_table.map(t => `<i>g<sup>${t.i}</sup> = <b>${t.value}</b></i>`).join("")}</div>`;
+      h += `<div class="sub">Primitive roots of p (${r.primitive_root_count} in total)</div><div class="pow">${r.primitive_roots.map(x => `<i class="root">${x}</i>`).join("")}${r.primitive_root_count > 10 ? "<i>…</i>" : ""}</div>`;
+      h += `<div class="note">${esc(r.dlp_note)}</div>`;
+    }
+    out.innerHTML = h;
+  } catch (err) { out.innerHTML = `<h3>Step by step</h3><div class="toast-err" style="margin:0">${esc(err.message)}</div>`; }
+}
+[["#tabRsa", "rsa"], ["#tabEg", "eg"]].forEach(([sel, k]) => $(sel).onclick = () => {
+  labKind = k; $("#tabRsa").setAttribute("aria-selected", k === "rsa"); $("#tabEg").setAttribute("aria-selected", k === "eg"); buildLab();
+});
+
+/* ---------- benchmark ---------- */
+let benchBusy = false, benchStarted = false;
+async function runBench() {
+  if (benchBusy) return; benchBusy = true; benchStarted = true;
+  const btn = $("#runBench"); btn.disabled = true; btn.textContent = "Measuring…";
+  try {
+    const r = await api("/api/benchmark?include_2048=" + $("#b2048").checked);
+    const rows = [];
+    r.rsa.forEach(x => { rows.push([`RSA-${x.bits} sign`, x.op1_ms, "rsa"], [`RSA-${x.bits} verify`, x.op2_ms, "rsa"]); });
+    r.elgamal.forEach(x => { rows.push([`ElGamal-${x.bits} encrypt`, x.op1_ms, "eg"], [`ElGamal-${x.bits} decrypt`, x.op2_ms, "eg"]); });
+    const lo = Math.log10(0.005), hi = Math.log10(Math.max(...rows.map(x => x[1])));
+    $("#bars").innerHTML = rows.map(([t, v, c]) => `<div class="bar-row"><span>${t}</span><div class="tr"><i class="${c}" data-w="${Math.max(3, (Math.log10(v) - lo) / (hi - lo) * 100)}"></i></div><b>${v} ms</b></div>`).join("");
+    requestAnimationFrame(() => requestAnimationFrame(() => document.querySelectorAll("#bars i").forEach(i => i.style.width = i.dataset.w + "%")));
+    $("#tps").textContent = r.estimate.trades_per_second;
+    $("#tpsNote").textContent = `trades per second (${r.estimate.ms_per_trade} ms each). ${r.estimate.note}`;
+    $("#tbl").innerHTML = `<tr><th>Scheme</th><th>Keygen</th><th>Output</th></tr>` + [...r.rsa.map(x => [`RSA-${x.bits}`, x.keygen_ms, x.output_bytes]), ...r.elgamal.map(x => [`ElGamal-${x.bits}`, x.keygen_ms, x.output_bytes])].map(([n, k, o]) => `<tr><td>${n}</td><td>${k} ms</td><td>${o} B</td></tr>`).join("");
+  } catch (err) { $("#bars").innerHTML = `<div class="toast-err">${esc(err.message)}</div>`; }
+  btn.disabled = false; btn.textContent = "Run again"; benchBusy = false;
+}
+$("#runBench").onclick = runBench;
+new IntersectionObserver((es, o) => { if (es[0].isIntersecting && !benchStarted) { runBench(); o.disconnect(); } }, { rootMargin: "200px" }).observe($("#benchmark"));
+
+/* ---------- boot ---------- */
+buildLab();
+initSim().catch(err => {
+  $("#people").innerHTML = `<div class="toast-err" style="grid-column:1/-1">Could not reach the Python backend (${esc(err.message)}). Start it with <span class="mono">python run.py</span> and reload this page.</div>`;
+});
+</script>
+</body>
+</html>
